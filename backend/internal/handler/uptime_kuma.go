@@ -16,6 +16,7 @@ func RegisterUptimeKumaRoutes(r *gin.Engine) {
 		g.GET("/monitors", GetUptimeKumaMonitors)
 		g.POST("/monitors/batch", GetUptimeKumaMonitorsBatch)
 		g.GET("/status-page", GetUptimeKumaStatusPage)
+		g.GET("/status-page/:slug", GetUptimeKumaStatusPageWithSlug)
 	}
 }
 
@@ -73,6 +74,20 @@ func GetUptimeKumaMonitorsBatch(c *gin.Context) {
 
 // GET /api/uptime-kuma/status-page
 func GetUptimeKumaStatusPage(c *gin.Context) {
+	window := c.DefaultQuery("window", service.DefaultTimeWindow)
+
+	svc := service.NewUptimeKumaService()
+	data, err := svc.GetStatusPage(window)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResp("QUERY_ERROR", err.Error(), ""))
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GET /api/uptime-kuma/status-page/:slug
+func GetUptimeKumaStatusPageWithSlug(c *gin.Context) {
+	// Ignore slug, always return the same status page
 	window := c.DefaultQuery("window", service.DefaultTimeWindow)
 
 	svc := service.NewUptimeKumaService()
