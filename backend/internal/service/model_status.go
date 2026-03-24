@@ -297,6 +297,12 @@ func (s *ModelStatusService) GetConfig() map[string]interface{} {
 	var customOrder []string
 	cm.GetJSON("model_status:custom_order", &customOrder)
 
+	var customGroups []map[string]interface{}
+	found, _ = cm.GetJSON("model_status:custom_groups", &customGroups)
+	if !found {
+		customGroups = []map[string]interface{}{}
+	}
+
 	return map[string]interface{}{
 		"time_window":      timeWindow,
 		"theme":            theme,
@@ -304,6 +310,8 @@ func (s *ModelStatusService) GetConfig() map[string]interface{} {
 		"sort_mode":        sortMode,
 		"custom_order":     customOrder,
 		"selected_models":  s.GetSelectedModels(),
+		"custom_groups":    customGroups,
+		"site_title":       s.GetSiteTitle(),
 	}
 }
 
@@ -335,6 +343,40 @@ func (s *ModelStatusService) SetSortMode(mode string) {
 func (s *ModelStatusService) SetCustomOrder(order []string) {
 	cm := cache.Get()
 	cm.Set("model_status:custom_order", order, 0)
+}
+
+// GetCustomGroups returns custom model groups from cache
+func (s *ModelStatusService) GetCustomGroups() []map[string]interface{} {
+	cm := cache.Get()
+	var groups []map[string]interface{}
+	found, _ := cm.GetJSON("model_status:custom_groups", &groups)
+	if found {
+		return groups
+	}
+	return []map[string]interface{}{}
+}
+
+// SetCustomGroups saves custom model groups to cache
+func (s *ModelStatusService) SetCustomGroups(groups []map[string]interface{}) {
+	cm := cache.Get()
+	cm.Set("model_status:custom_groups", groups, 0) // no expiry
+}
+
+// GetSiteTitle returns the custom site title
+func (s *ModelStatusService) GetSiteTitle() string {
+	cm := cache.Get()
+	var title string
+	found, _ := cm.GetJSON("model_status:site_title", &title)
+	if found {
+		return title
+	}
+	return ""
+}
+
+// SetSiteTitle saves the custom site title
+func (s *ModelStatusService) SetSiteTitle(title string) {
+	cm := cache.Get()
+	cm.Set("model_status:site_title", title, 0)
 }
 
 // GetEmbedConfig returns embed page configuration
