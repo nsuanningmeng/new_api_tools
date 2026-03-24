@@ -113,10 +113,3 @@ func (s *UptimeKumaService) GetStatusPage(window string) (map[string]interface{}
 		"incident":    []interface{}{},
 	}, nil
 }
-
-func toString(v interface{}) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
