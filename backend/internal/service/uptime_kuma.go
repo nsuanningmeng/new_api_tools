@@ -77,20 +77,18 @@ func (s *UptimeKumaService) GetMonitor(modelName, window string) (map[string]int
 	}, nil
 }
 
-// GetMonitors returns all monitors in Uptime Kuma format
+// GetMonitors returns selected monitors in Uptime Kuma format
 func (s *UptimeKumaService) GetMonitors(window string) ([]map[string]interface{}, error) {
-	models, err := s.modelStatus.GetAvailableModels()
-	if err != nil {
-		return nil, err
+	// Get selected models from config
+	selectedModels := s.modelStatus.GetSelectedModels()
+	
+	// If no models selected, return empty array (not all 90 models)
+	if len(selectedModels) == 0 {
+		return []map[string]interface{}{}, nil
 	}
 
 	monitors := make([]map[string]interface{}, 0)
-	for _, m := range models {
-		modelName := toString(m["model_name"])
-		if modelName == "" {
-			continue
-		}
-
+	for _, modelName := range selectedModels {
 		monitor, err := s.GetMonitor(modelName, window)
 		if err != nil {
 			continue
