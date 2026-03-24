@@ -110,6 +110,10 @@ func main() {
 	// Public embed routes (no auth)
 	handler.RegisterModelStatusEmbedRoutes(r)
 
+	// Uptime Kuma compatible routes (no auth)
+	handler.RegisterUptimeKumaRoutes(r)
+
+
 	// ========== 7. Background tasks ==========
 
 	// IP recording enforcement: check every 10 minutes, enable if any user disabled it
