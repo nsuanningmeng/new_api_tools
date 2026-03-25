@@ -1067,10 +1067,6 @@ export function ModelStatusEmbed({
               theme === 'tesla' && 'bg-[#111] border-t-2 border-[#333]',
             )}>
               <div className={cn("flex items-center gap-2", styles.statsText)}>
-                <span>总请求</span>
-                <span className={cn(styles.statsValue, 'tabular-nums')}>{totalRequests.toLocaleString()}</span>
-              </div>
-              <div className={cn("flex items-center gap-2", styles.statsText)}>
                 <span>平均成功率</span>
                 <span className={cn(
                   'font-semibold tabular-nums',
@@ -1243,10 +1239,6 @@ export function ModelStatusEmbed({
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between gap-6">
-              <span className={styles.tooltipLabel}>总请求</span>
-              <span className={styles.tooltipValue}>{hoveredSlot.total_requests}</span>
-            </div>
-            <div className="flex justify-between gap-6">
               <span className={styles.tooltipLabel}>成功数</span>
               <span className={cn(styles.tooltipValue, 'text-emerald-400')}>{hoveredSlot.success_count}</span>
             </div>
@@ -1336,9 +1328,6 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
         <div className={styles.statsText}>
           <span className={styles.statsValue}>{model.success_rate}%</span>
           {!isMinimal && ' 成功率'}
-          <span className={isMinimal ? 'mx-1' : 'mx-2 opacity-30'}>·</span>
-          <span>{model.total_requests.toLocaleString()}</span>
-          {!isMinimal && ' 请求'}
         </div>
       </div>
 
