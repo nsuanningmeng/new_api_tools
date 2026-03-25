@@ -1238,10 +1238,6 @@ export function ModelStatusEmbed({
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between gap-6">
-              <span className={styles.tooltipLabel}>成功数</span>
-              <span className={cn(styles.tooltipValue, 'text-emerald-400')}>{hoveredSlot.success_count}</span>
-            </div>
-            <div className="flex justify-between gap-6">
               <span className={styles.tooltipLabel}>成功率</span>
               <span className={cn(
                 styles.tooltipValue,
