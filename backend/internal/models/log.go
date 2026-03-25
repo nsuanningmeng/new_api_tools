@@ -21,6 +21,8 @@ type Log struct {
 	ChannelID        sql.NullInt64  `db:"channel_id" json:"channel_id"`
 	IP               sql.NullString `db:"ip" json:"ip"`
 	Duration         sql.NullInt64  `db:"duration" json:"duration"`
+	Group            sql.NullString `db:"group" json:"group"`
+	RequestID        sql.NullString `db:"request_id" json:"request_id"`
 }
 
 // LogType constants matching Python's log types

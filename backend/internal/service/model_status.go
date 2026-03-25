@@ -402,9 +402,49 @@ func (s *ModelStatusService) GetEmbedConfig() map[string]interface{} {
 
 // GetModelGroupStatus returns status for a specific model grouped by group field
 func (s *ModelStatusService) GetModelGroupStatus(modelName, window string) ([]map[string]interface{}, error) {
-	// Return empty array if group_name column doesn't exist
-	// This prevents 500 errors when the database hasn't been migrated yet
-	return []map[string]interface{}{}, nil
+	twConfig, ok := timeWindowConfigs[window]
+	if !ok {
+		twConfig = timeWindowConfigs["24h"]
+	}
+
+	now := time.Now().Unix()
+	startTime := now - twConfig.totalSeconds
+
+	// Query to get all groups for this model (using 'group' field, not 'group_name')
+	groupQuery := s.db.RebindQuery(`
+		SELECT DISTINCT group_col
+		FROM (
+			SELECT ` + "`group`" + ` as group_col,
+				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
+			FROM logs
+			WHERE model_name = ?
+				AND created_at >= ? AND created_at < ?
+				AND type IN (2, 5)
+				AND request_id != ''
+				AND ` + "`group`" + ` != ''
+		) latest
+		WHERE rn = 1`)
+
+	groupRows, err := s.db.Query(groupQuery, modelName, startTime, now)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for _, groupRow := range groupRows {
+		groupName := toString(groupRow["group_col"])
+		if groupName == "" {
+			continue
+		}
+
+		status, err := s.getModelGroupStatusDetail(modelName, groupName, window)
+		if err != nil {
+			continue
+		}
+		results = append(results, status)
+	}
+
+	return results, nil
 }
 
 // getModelGroupStatusDetail returns detailed status for a specific model+group
@@ -427,7 +467,7 @@ func (s *ModelStatusService) getModelGroupStatusDetail(modelName, groupName, win
 			SELECT created_at, type,
 				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
 			FROM logs
-			WHERE model_name = ? AND group_name = ?
+			WHERE model_name = ? AND `+"`group`"+` = ?
 				AND created_at >= ? AND created_at < ?
 				AND type IN (2, 5)
 				AND request_id != ''
