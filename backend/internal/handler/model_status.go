@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -446,6 +447,7 @@ func GetModelGroups(c *gin.Context) {
 	svc := service.NewModelStatusService()
 	data, err := svc.GetModelGroupStatus(modelName, window)
 	if err != nil {
+		log.Printf("GetModelGroups error for model %s: %v", modelName, err)
 		c.JSON(http.StatusInternalServerError, models.ErrorResp("QUERY_ERROR", err.Error(), ""))
 		return
 	}
