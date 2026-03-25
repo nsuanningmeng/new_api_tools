@@ -1289,16 +1289,20 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
       try {
         const res = await fetch(`${apiUrl}/api/model-status/embed/groups/${model.model_name}?window=${model.time_window}`)
         const data = await res.json()
-        if (data.success && data.data && data.data.length > 1) {
+        if (data.success && data.data) {
           setGroups(data.data)
+          if (data.data.length > 1) {
+            setExpanded(true)
+          }
         }
       } catch (err) {
         console.error(`Failed to fetch groups for ${model.model_name}:`, err)
       } finally {
         setLoading(false)
       }
+    } else {
+      setExpanded(!expanded)
     }
-    setExpanded(!expanded)
   }
 
   const handleMouseEnter = (slot: SlotStatus, event: React.MouseEvent) => {
@@ -1374,7 +1378,7 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
             <span className={styles.statsValue}>{model.success_rate}%</span>
             {!isMinimal && ' 成功率'}
           </div>
-          {!isMinimal && (
+          {!isMinimal && (groups.length === 0 || groups.length > 1) && (
             <button
               onClick={handleExpand}
               className={cn("p-1 rounded hover:bg-current/10 transition-colors", styles.statsText)}
