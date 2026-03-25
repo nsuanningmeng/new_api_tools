@@ -399,3 +399,169 @@ func (s *ModelStatusService) GetEmbedConfig() map[string]interface{} {
 	config["available_sort_modes"] = AvailableSortModes
 	return config
 }
+
+// GetModelGroupStatus returns status for a specific model grouped by group field
+func (s *ModelStatusService) GetModelGroupStatus(modelName, window string) ([]map[string]interface{}, error) {
+	twConfig, ok := timeWindowConfigs[window]
+	if !ok {
+		twConfig = timeWindowConfigs["24h"]
+	}
+
+	now := time.Now().Unix()
+	startTime := now - twConfig.totalSeconds
+
+	// Query to get all groups for this model
+	groupQuery := s.db.RebindQuery(`
+		SELECT DISTINCT group_name
+		FROM (
+			SELECT group_name,
+				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
+			FROM logs
+			WHERE model_name = ?
+				AND created_at >= ? AND created_at < ?
+				AND type IN (2, 5)
+				AND request_id != ''
+				AND group_name != ''
+		) latest
+		WHERE rn = 1`)
+
+	groupRows, err := s.db.Query(groupQuery, modelName, startTime, now)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]interface{}, 0)
+	for _, groupRow := range groupRows {
+		groupName := toString(groupRow["group_name"])
+		if groupName == "" {
+			continue
+		}
+
+		status, err := s.getModelGroupStatusDetail(modelName, groupName, window)
+		if err != nil {
+			continue
+		}
+		results = append(results, status)
+	}
+
+	return results, nil
+}
+
+// getModelGroupStatusDetail returns detailed status for a specific model+group
+func (s *ModelStatusService) getModelGroupStatusDetail(modelName, groupName, window string) (map[string]interface{}, error) {
+	twConfig, ok := timeWindowConfigs[window]
+	if !ok {
+		twConfig = timeWindowConfigs["24h"]
+	}
+
+	now := time.Now().Unix()
+	startTime := now - twConfig.totalSeconds
+	numSlots := twConfig.numSlots
+	slotSeconds := twConfig.slotSeconds
+
+	slotQuery := s.db.RebindQuery(fmt.Sprintf(`
+		SELECT FLOOR((created_at - %d) / %d) as slot_idx,
+			COUNT(*) as total,
+			SUM(CASE WHEN type = 2 THEN 1 ELSE 0 END) as success
+		FROM (
+			SELECT created_at, type,
+				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
+			FROM logs
+			WHERE model_name = ? AND group_name = ?
+				AND created_at >= ? AND created_at < ?
+				AND type IN (2, 5)
+				AND request_id != ''
+		) latest
+		WHERE rn = 1
+		GROUP BY FLOOR((created_at - %d) / %d)`,
+		startTime, slotSeconds,
+		startTime, slotSeconds))
+
+	rows, _ := s.db.Query(slotQuery, modelName, groupName, startTime, now)
+
+	type slotInfo struct {
+		total   int64
+		success int64
+	}
+	slotMap := make(map[int64]*slotInfo, numSlots)
+
+	if rows != nil {
+		for _, row := range rows {
+			idx := toInt64(row["slot_idx"])
+			if idx >= 0 && idx < int64(numSlots) {
+				slotMap[idx] = &slotInfo{
+					total:   toInt64(row["total"]),
+					success: toInt64(row["success"]),
+				}
+			}
+		}
+	}
+
+	slotData := make([]map[string]interface{}, 0, numSlots)
+	totalReqs := int64(0)
+	totalSuccess := int64(0)
+
+	for i := 0; i < numSlots; i++ {
+		slotStart := startTime + int64(i)*slotSeconds
+		slotEnd := slotStart + slotSeconds
+
+		si := slotMap[int64(i)]
+		slotTotal := int64(0)
+		slotSuccess := int64(0)
+		if si != nil {
+			slotTotal = si.total
+			slotSuccess = si.success
+		}
+
+		slotRate := float64(100)
+		if slotTotal > 0 {
+			slotRate = float64(slotSuccess) / float64(slotTotal) * 100
+		}
+
+		slotData = append(slotData, map[string]interface{}{
+			"slot":           i,
+			"start_time":     slotStart,
+			"end_time":       slotEnd,
+			"total_requests": slotTotal,
+			"success_count":  slotSuccess,
+			"success_rate":   roundRate(slotRate),
+			"status":         getStatusColor(slotRate, slotTotal),
+		})
+
+		totalReqs += slotTotal
+		totalSuccess += slotSuccess
+	}
+
+	overallRate := float64(100)
+	if totalReqs > 0 {
+		overallRate = float64(totalSuccess) / float64(totalReqs) * 100
+	}
+
+	return map[string]interface{}{
+		"group_name":     groupName,
+		"model_name":     modelName,
+		"time_window":    window,
+		"total_requests": totalReqs,
+		"success_count":  totalSuccess,
+		"success_rate":   roundRate(overallRate),
+		"current_status": getStatusColor(overallRate, totalReqs),
+		"slot_data":      slotData,
+	}, nil
+}
+
+// GetSelectedGroups returns selected group names from cache
+func (s *ModelStatusService) GetSelectedGroups() []string {
+	cm := cache.Get()
+	var groups []string
+	found, _ := cm.GetJSON("model_status:selected_groups", &groups)
+	if found {
+		return groups
+	}
+	return []string{}
+}
+
+// SetSelectedGroups saves selected groups to cache
+func (s *ModelStatusService) SetSelectedGroups(groups []string) {
+	cm := cache.Get()
+	cm.Set("model_status:selected_groups", groups, 0)
+}
