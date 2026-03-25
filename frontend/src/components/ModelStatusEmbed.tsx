@@ -923,26 +923,7 @@ export function ModelStatusEmbed({
       })
       const data = await response.json()
       if (data.success) {
-        // Fetch groups for each model in parallel
-        const modelsWithGroups = await Promise.all(
-          data.data.map(async (model: ModelStatus) => {
-            try {
-              const groupRes = await fetch(`${apiUrl}/api/model-status/embed/groups/${model.model_name}?window=${timeWindow}`)
-              const groupData = await groupRes.json()
-              if (groupData.success && groupData.data) {
-                return {
-                  ...model,
-                  groups: groupData.data,
-                  hasMultipleGroups: groupData.data.length > 1
-                }
-              }
-            } catch (err) {
-              console.error(`Failed to fetch groups for ${model.model_name}:`, err)
-            }
-            return model
-          })
-        )
-        setModelStatuses(modelsWithGroups)
+        setModelStatuses(data.data)
         setLastUpdate(new Date())
       }
     } catch (error) {
@@ -1298,6 +1279,27 @@ interface EmbedModelCardProps {
 
 function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [groups, setGroups] = useState<GroupStatus[]>([])
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+
+  const handleExpand = async () => {
+    if (!expanded && groups.length === 0 && !loading) {
+      setLoading(true)
+      try {
+        const res = await fetch(`${apiUrl}/api/model-status/embed/groups/${model.model_name}?window=${model.time_window}`)
+        const data = await res.json()
+        if (data.success && data.data && data.data.length > 1) {
+          setGroups(data.data)
+        }
+      } catch (err) {
+        console.error(`Failed to fetch groups for ${model.model_name}:`, err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    setExpanded(!expanded)
+  }
 
   const handleMouseEnter = (slot: SlotStatus, event: React.MouseEvent) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -1372,9 +1374,9 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
             <span className={styles.statsValue}>{model.success_rate}%</span>
             {!isMinimal && ' 成功率'}
           </div>
-          {model.hasMultipleGroups && !isMinimal && (
+          {!isMinimal && (
             <button
-              onClick={() => setExpanded(!expanded)}
+              onClick={handleExpand}
               className={cn("p-1 rounded hover:bg-current/10 transition-colors", styles.statsText)}
               aria-label={expanded ? '折叠' : '展开'}
             >
@@ -1386,9 +1388,9 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
 
       {renderStatusTimeline(model)}
 
-      {expanded && model.groups && model.groups.length > 0 && (
+      {expanded && groups.length > 0 && (
         <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
-          {model.groups.map((group) => (
+          {groups.map((group) => (
             <div key={group.group_name} className={cn("border-l-2 pl-4", styles.statsText)}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">{group.group_name}</span>
