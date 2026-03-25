@@ -18,6 +18,7 @@ func RegisterModelStatusRoutes(r *gin.RouterGroup) {
 		g.POST("/status/multiple", GetMultipleModelsStatusHandler)
 		g.POST("/status/batch", GetMultipleModelsStatusHandler)
 		g.GET("/status/all", GetAllModelsStatusHandler)
+		g.GET("/groups/:model_name", GetModelGroups)
 		g.GET("/selected", GetSelectedModels)
 		g.PUT("/selected", SetSelectedModels)
 		g.GET("/config/selected", GetSelectedModels)
@@ -41,6 +42,8 @@ func RegisterModelStatusRoutes(r *gin.RouterGroup) {
 		g.GET("/config/groups", GetCustomGroupsConfig)
 		g.PUT("/config/groups", SetCustomGroupsConfig)
 		g.POST("/config/groups", SetCustomGroupsConfig)
+		g.GET("/config/selected-groups", GetSelectedGroupsConfig)
+		g.PUT("/config/selected-groups", SetSelectedGroupsConfig)
 		g.GET("/config/site-title", GetSiteTitleConfig)
 		g.PUT("/config/site-title", SetSiteTitleConfig)
 		g.POST("/config/site-title", SetSiteTitleConfig)
@@ -430,5 +433,47 @@ func SetSiteTitleConfig(c *gin.Context) {
 		"success":    true,
 		"site_title": req.SiteTitle,
 		"message":    "Site title updated",
+	})
+}
+
+// GET /groups/:model_name
+func GetModelGroups(c *gin.Context) {
+	modelName := c.Param("model_name")
+	window := c.DefaultQuery("window", service.DefaultTimeWindow)
+
+	svc := service.NewModelStatusService()
+	data, err := svc.GetModelGroupStatus(modelName, window)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResp("QUERY_ERROR", err.Error(), ""))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
+}
+
+// GET /config/selected-groups
+func GetSelectedGroupsConfig(c *gin.Context) {
+	svc := service.NewModelStatusService()
+	groups := svc.GetSelectedGroups()
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    groups,
+	})
+}
+
+// PUT /config/selected-groups
+func SetSelectedGroupsConfig(c *gin.Context) {
+	var req struct {
+		Groups []string `json:"groups"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResp("INVALID_PARAMS", "Invalid request", err.Error()))
+		return
+	}
+	svc := service.NewModelStatusService()
+	svc.SetSelectedGroups(req.Groups)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    req.Groups,
+		"message": "Selected groups updated",
 	})
 }
