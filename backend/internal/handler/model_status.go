@@ -63,6 +63,7 @@ func RegisterModelStatusEmbedRoutes(r *gin.Engine) {
 		g.POST("/status/multiple", GetMultipleModelsStatusHandler)
 		g.POST("/status/batch", GetMultipleModelsStatusHandler)
 		g.GET("/status/all", GetAllModelsStatusHandler)
+		g.GET("/groups/:model_name", GetModelGroups)
 		g.GET("/config", GetEmbedConfig)
 		g.GET("/config/selected", GetSelectedModels)
 	}
@@ -76,6 +77,7 @@ func RegisterModelStatusEmbedRoutes(r *gin.Engine) {
 		e.POST("/status/multiple", GetMultipleModelsStatusHandler)
 		e.POST("/status/batch", GetMultipleModelsStatusHandler)
 		e.GET("/status/all", GetAllModelsStatusHandler)
+		e.GET("/groups/:model_name", GetModelGroups)
 		e.GET("/config", GetEmbedConfig)
 		e.GET("/config/selected", GetSelectedModels)
 	}
