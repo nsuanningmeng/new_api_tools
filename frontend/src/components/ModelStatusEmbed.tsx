@@ -1040,7 +1040,6 @@ export function ModelStatusEmbed({
 
         {/* Stats Overview Bar */}
         {modelStatuses.length > 0 && theme !== 'minimal' && (() => {
-          const totalRequests = modelStatuses.reduce((sum, m) => sum + m.total_requests, 0)
           const activeModels = modelStatuses.filter(m => m.total_requests > 0)
           const avgRate = activeModels.length > 0 ? +(activeModels.reduce((sum, m) => sum + m.success_rate, 0) / activeModels.length).toFixed(1) : 0
           const greenCount = modelStatuses.filter(m => m.current_status === 'green').length
