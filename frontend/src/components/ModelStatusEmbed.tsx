@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { cn } from '../lib/utils'
-import { Loader2, Timer, Activity, Zap, Sun, Moon, Minimize2, Terminal, Leaf, Droplets, Command, LayoutGrid, Bot, MessageSquareQuote, Triangle, Sparkles, CreditCard, GitBranch, Gamepad2, Rocket, Brain, Layers, Tag } from 'lucide-react'
+import { Loader2, Timer, Activity, Zap, Sun, Moon, Minimize2, Terminal, Leaf, Droplets, Command, LayoutGrid, Bot, MessageSquareQuote, Triangle, Sparkles, CreditCard, GitBranch, Gamepad2, Rocket, Brain, Layers, Tag, ChevronDown } from 'lucide-react'
 import {
   OpenAI, Gemini, DeepSeek, SiliconCloud, Groq, Ollama, Claude, Mistral,
   Minimax, Baichuan, Moonshot, Spark, Qwen, Yi, Hunyuan, Stepfun, ZeroOne,
@@ -22,6 +22,16 @@ interface SlotStatus {
   status: 'green' | 'yellow' | 'red'
 }
 
+interface GroupStatus {
+  group_name: string
+  model_name: string
+  total_requests: number
+  success_count: number
+  success_rate: number
+  current_status: 'green' | 'yellow' | 'red'
+  slot_data: SlotStatus[]
+}
+
 interface ModelStatus {
   model_name: string
   display_name: string
@@ -31,6 +41,8 @@ interface ModelStatus {
   success_rate: number
   current_status: 'green' | 'yellow' | 'red'
   slot_data: SlotStatus[]
+  groups?: GroupStatus[]
+  hasMultipleGroups?: boolean
 }
 
 type ThemeId = 'obsidian' | 'daylight' | 'minimal' | 'neon' | 'forest' | 'ocean' | 'terminal' | 'cupertino' | 'material' | 'openai' | 'anthropic' | 'vercel' | 'linear' | 'stripe' | 'github' | 'discord' | 'tesla'
@@ -895,8 +907,7 @@ export function ModelStatusEmbed({
     loadConfig()
   }, [loadConfig])
 
-  // Fetch model statuses
-  // Embed page always uses cache to reduce database load
+  // Fetch model statuses with groups
   const fetchModelStatuses = useCallback(async () => {
     if (selectedModels.length === 0) {
       setModelStatuses([])
@@ -912,7 +923,26 @@ export function ModelStatusEmbed({
       })
       const data = await response.json()
       if (data.success) {
-        setModelStatuses(data.data)
+        // Fetch groups for each model in parallel
+        const modelsWithGroups = await Promise.all(
+          data.data.map(async (model: ModelStatus) => {
+            try {
+              const groupRes = await fetch(`${apiUrl}/api/model-status/groups/${model.model_name}?window=${timeWindow}`)
+              const groupData = await groupRes.json()
+              if (groupData.success && groupData.data) {
+                return {
+                  ...model,
+                  groups: groupData.data,
+                  hasMultipleGroups: groupData.data.length > 1
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to fetch groups for ${model.model_name}:`, err)
+            }
+            return model
+          })
+        )
+        setModelStatuses(modelsWithGroups)
         setLastUpdate(new Date())
       }
     } catch (error) {
@@ -1267,7 +1297,8 @@ interface EmbedModelCardProps {
 }
 
 function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCardProps) {
-  
+  const [expanded, setExpanded] = useState(false)
+
   const handleMouseEnter = (slot: SlotStatus, event: React.MouseEvent) => {
     const rect = event.currentTarget.getBoundingClientRect()
     onHover(slot, rect)
@@ -1285,32 +1316,48 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
   const timeLabels = getTimeLabels()
   const isMinimal = theme === 'minimal'
 
+  const renderStatusTimeline = (data: ModelStatus | GroupStatus, isGroup = false) => (
+    <div className={cn("relative", isGroup && "pl-8")}>
+      <div className={cn("flex", isMinimal ? 'gap-px h-4' : 'gap-0.5 h-7')}>
+        {data.slot_data.map((slot, index) => (
+          <div
+            key={index}
+            className={cn(
+              "flex-1 rounded-sm cursor-pointer transition-all duration-200",
+              slot.total_requests === 0 ? styles.statusEmpty : getStatusColor(slot.status, styles),
+              styles.statusHover
+            )}
+            onMouseEnter={(e) => handleMouseEnter(slot, e)}
+            onMouseLeave={onLeave}
+          />
+        ))}
+      </div>
+      {!isGroup && (
+        <div className={cn("flex justify-between mt-2", styles.timeLabel)}>
+          <span>{isMinimal ? timeLabels[0].replace('分钟前', 'm').replace('小时前', 'h') : timeLabels[0]}</span>
+          <span>{isMinimal ? timeLabels[1].replace('分钟前', 'm').replace('小时前', 'h') : timeLabels[1]}</span>
+          <span>{isMinimal ? 'now' : timeLabels[2]}</span>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className={cn(styles.card, styles.cardHover)}>
-      {/* Neon theme glow line */}
       {theme === 'neon' && (
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
       )}
 
-      {/* Header */}
-      <div className={cn(
-        "flex items-center justify-between",
-        isMinimal ? 'mb-2' : 'mb-4'
-      )}>
+      <div className={cn("flex items-center justify-between", isMinimal ? 'mb-2' : 'mb-4')}>
         <div className="flex items-center gap-3 min-w-0">
           {!isMinimal && (
             <div className="flex items-center justify-center w-7 h-7 rounded-md bg-current/5 flex-shrink-0">
               <ModelLogo modelName={model.model_name} size={18} />
             </div>
           )}
-          <h3 className={styles.modelName} title={model.model_name}>
-            {model.model_name}
-          </h3>
+          <h3 className={styles.modelName} title={model.model_name}>{model.model_name}</h3>
           {!isMinimal && (
-            <span className={cn(
-              "px-2 py-0.5 text-xs rounded-full font-medium",
-              getBadgeColor(model.current_status, styles)
-            )}>
+            <span className={cn("px-2 py-0.5 text-xs rounded-full font-medium", getBadgeColor(model.current_status, styles))}>
               {STATUS_LABELS[model.current_status]}
             </span>
           )}
@@ -1320,42 +1367,40 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
             </span>
           )}
         </div>
-        <div className={styles.statsText}>
-          <span className={styles.statsValue}>{model.success_rate}%</span>
-          {!isMinimal && ' 成功率'}
+        <div className="flex items-center gap-2">
+          <div className={styles.statsText}>
+            <span className={styles.statsValue}>{model.success_rate}%</span>
+            {!isMinimal && ' 成功率'}
+          </div>
+          {model.hasMultipleGroups && !isMinimal && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className={cn("p-1 rounded hover:bg-current/10 transition-colors", styles.statsText)}
+              aria-label={expanded ? '折叠' : '展开'}
+            >
+              <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Status Timeline */}
-      <div className="relative">
-        <div className={cn(
-          "flex",
-          isMinimal ? 'gap-px h-4' : 'gap-0.5 h-7'
-        )}>
-          {model.slot_data.map((slot, index) => (
-            <div
-              key={index}
-              className={cn(
-                "flex-1 rounded-sm cursor-pointer transition-all duration-200",
-                slot.total_requests === 0 ? styles.statusEmpty : getStatusColor(slot.status, styles),
-                styles.statusHover
-              )}
-              onMouseEnter={(e) => handleMouseEnter(slot, e)}
-              onMouseLeave={onLeave}
-            />
+      {renderStatusTimeline(model)}
+
+      {expanded && model.groups && model.groups.length > 0 && (
+        <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+          {model.groups.map((group) => (
+            <div key={group.group_name} className={cn("border-l-2 pl-4", styles.statsText)}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">{group.group_name}</span>
+                <span className="text-xs">
+                  <span className={styles.statsValue}>{group.success_rate}%</span>
+                </span>
+              </div>
+              {renderStatusTimeline(group, true)}
+            </div>
           ))}
         </div>
-
-        {/* Time labels */}
-        <div className={cn(
-          "flex justify-between mt-2",
-          styles.timeLabel
-        )}>
-          <span>{isMinimal ? timeLabels[0].replace('分钟前', 'm').replace('小时前', 'h') : timeLabels[0]}</span>
-          <span>{isMinimal ? timeLabels[1].replace('分钟前', 'm').replace('小时前', 'h') : timeLabels[1]}</span>
-          <span>{isMinimal ? 'now' : timeLabels[2]}</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
