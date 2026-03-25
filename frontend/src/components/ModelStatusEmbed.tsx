@@ -927,7 +927,7 @@ export function ModelStatusEmbed({
         const modelsWithGroups = await Promise.all(
           data.data.map(async (model: ModelStatus) => {
             try {
-              const groupRes = await fetch(`${apiUrl}/api/model-status/groups/${model.model_name}?window=${timeWindow}`)
+              const groupRes = await fetch(`${apiUrl}/api/model-status/embed/groups/${model.model_name}?window=${timeWindow}`)
               const groupData = await groupRes.json()
               if (groupData.success && groupData.data) {
                 return {
