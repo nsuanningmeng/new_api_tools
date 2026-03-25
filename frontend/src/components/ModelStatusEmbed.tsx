@@ -1388,20 +1388,26 @@ function EmbedModelCard({ model, theme, styles, onHover, onLeave }: EmbedModelCa
 
       {renderStatusTimeline(model)}
 
-      {expanded && groups.length > 0 && (
-        <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
-          {groups.map((group) => (
-            <div key={group.group_name} className={cn("border-l-2 pl-4", styles.statsText)}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{group.group_name}</span>
-                <span className="text-xs">
-                  <span className={styles.statsValue}>{group.success_rate}%</span>
-                </span>
+      {expanded && (
+        groups.length > 0 ? (
+          <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+            {groups.map((group) => (
+              <div key={group.group_name} className={cn("border-l-2 pl-4", styles.statsText)}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">{group.group_name}</span>
+                  <span className="text-xs">
+                    <span className={styles.statsValue}>{group.success_rate}%</span>
+                  </span>
+                </div>
+                {renderStatusTimeline(group, true)}
               </div>
-              {renderStatusTimeline(group, true)}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : loading ? (
+          <div className="mt-4 text-center text-sm opacity-60">加载中...</div>
+        ) : (
+          <div className="mt-4 text-center text-sm opacity-60">仅一个分组</div>
+        )
       )}
     </div>
   )
