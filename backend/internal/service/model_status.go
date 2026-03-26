@@ -244,7 +244,7 @@ func (s *ModelStatusService) GetModelStatus(modelName, window string) (map[strin
 		"slot_data":      slotData,
 	}
 
-	cm.Set(cacheKey, result, 30*time.Second)
+	cm.Set(cacheKey, result, 5*time.Minute)
 	return result, nil
 }
 
