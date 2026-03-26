@@ -323,6 +323,7 @@ export function ModelStatusMonitor({ isEmbed = false }: ModelStatusMonitorProps)
   const [availableModels, setAvailableModels] = useState<ModelWithStats[]>([])
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [modelStatuses, setModelStatuses] = useState<ModelStatus[]>([])
+  const [summaryData, setSummaryData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -613,6 +614,7 @@ export function ModelStatusMonitor({ isEmbed = false }: ModelStatusMonitorProps)
       const data = await response.json()
       if (data.success) {
         setModelStatuses(data.data)
+        setSummaryData(data.summary)
         setInitialLoading(false)
       }
     } catch (error) {
@@ -734,10 +736,15 @@ export function ModelStatusMonitor({ isEmbed = false }: ModelStatusMonitorProps)
 
   // Average success rate
   const avgSuccessRate = useMemo(() => {
+    // 优先使用后端返回的 summary
+    if (summaryData?.average_success_rate !== undefined) {
+      return summaryData.average_success_rate
+    }
+    // 兜底：旧后端未返回时使用本地计算
     const active = modelStatuses.filter(m => m.total_requests > 0)
     if (active.length === 0) return 0
     return +(active.reduce((sum, m) => sum + m.success_rate, 0) / active.length).toFixed(1)
-  }, [modelStatuses])
+  }, [modelStatuses, summaryData])
 
   // Handle group filter change
   const handleGroupFilterChange = useCallback((gid: string) => {
@@ -968,7 +975,7 @@ export function ModelStatusMonitor({ isEmbed = false }: ModelStatusMonitorProps)
                       <span className="text-muted-foreground/40">·</span>
                       <span>总请求 <span className="font-semibold text-foreground tabular-nums">{modelStatuses.reduce((sum, m) => sum + m.total_requests, 0).toLocaleString()}</span></span>
                       <span className="text-muted-foreground/40">·</span>
-                      <span>平均成功率 <span className={cn("font-semibold tabular-nums", avgSuccessRate >= 95 ? 'text-green-600' : avgSuccessRate >= 80 ? 'text-yellow-600' : 'text-red-600')}>{avgSuccessRate}%</span></span>
+                      <span>平均成功率 <span className={cn("font-semibold tabular-nums", avgSuccessRate >= 95 ? 'text-green-600' : avgSuccessRate >= 80 ? 'text-yellow-600' : 'text-red-600')}>{avgSuccessRate}%</span>{summaryData?.excluded_keyword && <span className="text-xs opacity-60">(已排除{summaryData.excluded_keyword})</span>}</span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="flex items-center gap-1.5">
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /><span className="font-medium text-green-600 tabular-nums">{statusCounts.green}</span></span>

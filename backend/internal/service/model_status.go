@@ -62,6 +62,30 @@ func roundRate(rate float64) float64 {
 	return math.Round(rate*100) / 100
 }
 
+// isFailureByStatusCode checks if a request should be counted as failure
+// Only 500, 429, 503 are considered failures; all others are success
+func isFailureByStatusCode(statusCode int) bool {
+	return statusCode == 500 || statusCode == 429 || statusCode == 503
+}
+
+// buildStatusCodeExpr builds SQL expression to extract status_code from other JSON field
+func buildStatusCodeExpr(isPG bool) string {
+	if isPG {
+		return "CAST(other::jsonb->>'status_code' AS INTEGER)"
+	}
+	return "CAST(JSON_UNQUOTE(JSON_EXTRACT(other, '$.status_code')) AS UNSIGNED)"
+}
+
+// buildSuccessCondition builds SQL CASE expression for success counting with status code fallback
+func buildSuccessCondition(isPG bool) string {
+	statusCodeExpr := buildStatusCodeExpr(isPG)
+	return fmt.Sprintf(`CASE
+		WHEN other IS NOT NULL AND other != '' AND %s IS NOT NULL
+		THEN CASE WHEN %s NOT IN (429, 500, 503) THEN 1 ELSE 0 END
+		ELSE CASE WHEN type = 2 THEN 1 ELSE 0 END
+	END`, statusCodeExpr, statusCodeExpr)
+}
+
 // ModelStatusService handles model availability monitoring
 type ModelStatusService struct {
 	db *database.Manager
@@ -564,4 +588,84 @@ func (s *ModelStatusService) GetSelectedGroups() []string {
 func (s *ModelStatusService) SetSelectedGroups(groups []string) {
 	cm := cache.Get()
 	cm.Set("model_status:selected_groups", groups, 0)
+}
+
+// GetBatchSummary calculates average success rate excluding groups with keyword
+func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string, excludeKeyword string) (map[string]interface{}, error) {
+	if len(modelNames) == 0 {
+		return map[string]interface{}{
+			"average_success_rate": 0,
+			"excluded_keyword":     excludeKeyword,
+			"models_count":         0,
+		}, nil
+	}
+
+	twConfig, ok := timeWindowConfigs[window]
+	if !ok {
+		twConfig = timeWindowConfigs["24h"]
+	}
+
+	now := time.Now().Unix()
+	startTime := now - twConfig.totalSeconds
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := []interface{}{}
+	for i, name := range modelNames {
+		if i > 0 {
+			placeholders += ","
+		}
+		placeholders += "?"
+		args = append(args, name)
+	}
+	args = append(args, startTime, now, "%"+excludeKeyword+"%")
+
+	successCondition := buildSuccessCondition(s.db.IsPG)
+
+	query := s.db.RebindQuery(fmt.Sprintf(`
+		SELECT model_name,
+			COUNT(*) as total,
+			SUM(%s) as success
+		FROM (
+			SELECT model_name, type, other, ` + "`group`" + `,
+				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
+			FROM logs
+			WHERE model_name IN (%s)
+				AND created_at >= ? AND created_at < ?
+				AND type IN (2, 5)
+				AND request_id != ''
+				AND (` + "`group`" + ` NOT LIKE ? OR ` + "`group`" + ` IS NULL OR ` + "`group`" + ` = '')
+		) latest
+		WHERE rn = 1
+		GROUP BY model_name`, successCondition, placeholders))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	totalSuccessRate := 0.0
+	modelsWithRequests := 0
+
+	for _, row := range rows {
+		total := toInt64(row["total"])
+		success := toInt64(row["success"])
+		if total > 0 {
+			rate := float64(success) / float64(total) * 100
+			totalSuccessRate += rate
+			modelsWithRequests++
+		}
+	}
+
+	avgRate := 0.0
+	if modelsWithRequests > 0 {
+		avgRate = totalSuccessRate / float64(modelsWithRequests)
+	}
+
+	return map[string]interface{}{
+		"average_success_rate": roundRate(avgRate),
+		"excluded_keyword":     excludeKeyword,
+		"models_count":         modelsWithRequests,
+		"failure_status_codes": []int{429, 500, 503},
+	}, nil
 }

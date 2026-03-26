@@ -133,9 +133,13 @@ func GetMultipleModelsStatusHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResp("QUERY_ERROR", err.Error(), ""))
 		return
 	}
+
+	summary, _ := svc.GetBatchSummary(modelNames, window, "特价")
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
 		"data":        data,
+		"summary":     summary,
 		"time_window": window,
 		"cache_ttl":   60,
 	})
@@ -151,9 +155,19 @@ func GetAllModelsStatusHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResp("QUERY_ERROR", err.Error(), ""))
 		return
 	}
+
+	modelNames := []string{}
+	for _, m := range data {
+		if name, ok := m["model_name"].(string); ok {
+			modelNames = append(modelNames, name)
+		}
+	}
+	summary, _ := svc.GetBatchSummary(modelNames, window, "特价")
+
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
 		"data":        data,
+		"summary":     summary,
 		"time_window": window,
 		"cache_ttl":   60,
 	})
