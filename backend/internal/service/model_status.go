@@ -620,14 +620,13 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 	}
 	args = append(args, startTime, now, "%"+excludeKeyword+"%")
 
-	successCondition := buildSuccessCondition(s.db.IsPG)
-
+	// 暂时使用 type=2/5 判定，避免 other 字段不存在导致 SQL 错误
 	query := s.db.RebindQuery(fmt.Sprintf(`
 		SELECT model_name,
 			COUNT(*) as total,
-			SUM(%s) as success
+			SUM(CASE WHEN type = 2 THEN 1 ELSE 0 END) as success
 		FROM (
-			SELECT model_name, type, other, ` + "`group`" + `,
+			SELECT model_name, type, ` + "`group`" + `,
 				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
 			FROM logs
 			WHERE model_name IN (%s)
@@ -637,7 +636,7 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 				AND (` + "`group`" + ` NOT LIKE ? OR ` + "`group`" + ` IS NULL OR ` + "`group`" + ` = '')
 		) latest
 		WHERE rn = 1
-		GROUP BY model_name`, successCondition, placeholders))
+		GROUP BY model_name`, placeholders))
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
