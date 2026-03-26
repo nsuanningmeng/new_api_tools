@@ -621,11 +621,14 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 	}
 	args = append(args, startTime, now, "%"+excludeKeyword+"%")
 
+	// 使用状态码白名单：优先 other.status_code，回退 type=2/5
+	successCondition := buildSuccessCondition(s.db.IsPG)
+
 	// 优化后的查询：使用 MAX(id) 代替窗口函数
 	query := s.db.RebindQuery(fmt.Sprintf(`
 		SELECT l.model_name,
 			COUNT(DISTINCT l.request_id) as total,
-			SUM(CASE WHEN l.type = 2 THEN 1 ELSE 0 END) as success
+			SUM(%s) as success
 		FROM logs l
 		INNER JOIN (
 			SELECT request_id, MAX(id) as max_id
@@ -637,7 +640,7 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 			GROUP BY request_id
 		) latest ON l.id = latest.max_id
 		WHERE (l.` + "`group`" + ` NOT LIKE ? OR l.` + "`group`" + ` IS NULL OR l.` + "`group`" + ` = '')
-		GROUP BY l.model_name`, placeholders))
+		GROUP BY l.model_name`, successCondition, placeholders))
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
