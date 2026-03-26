@@ -591,6 +591,7 @@ func (s *ModelStatusService) SetSelectedGroups(groups []string) {
 }
 
 // GetBatchSummary calculates average success rate excluding groups with keyword
+// 优化版本：避免窗口函数，使用子查询 + GROUP BY
 func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string, excludeKeyword string) (map[string]interface{}, error) {
 	if len(modelNames) == 0 {
 		return map[string]interface{}{
@@ -608,7 +609,7 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 	now := time.Now().Unix()
 	startTime := now - twConfig.totalSeconds
 
-	// Build placeholders for IN clause
+	// 优化：直接在 WHERE 条件中过滤，避免窗口函数
 	placeholders := ""
 	args := []interface{}{}
 	for i, name := range modelNames {
@@ -620,23 +621,23 @@ func (s *ModelStatusService) GetBatchSummary(modelNames []string, window string,
 	}
 	args = append(args, startTime, now, "%"+excludeKeyword+"%")
 
-	// 暂时使用 type=2/5 判定，避免 other 字段不存在导致 SQL 错误
+	// 优化后的查询：使用 MAX(id) 代替窗口函数
 	query := s.db.RebindQuery(fmt.Sprintf(`
-		SELECT model_name,
-			COUNT(*) as total,
-			SUM(CASE WHEN type = 2 THEN 1 ELSE 0 END) as success
-		FROM (
-			SELECT model_name, type, ` + "`group`" + `,
-				ROW_NUMBER() OVER (PARTITION BY request_id ORDER BY id DESC) as rn
+		SELECT l.model_name,
+			COUNT(DISTINCT l.request_id) as total,
+			SUM(CASE WHEN l.type = 2 THEN 1 ELSE 0 END) as success
+		FROM logs l
+		INNER JOIN (
+			SELECT request_id, MAX(id) as max_id
 			FROM logs
 			WHERE model_name IN (%s)
 				AND created_at >= ? AND created_at < ?
 				AND type IN (2, 5)
 				AND request_id != ''
-				AND (` + "`group`" + ` NOT LIKE ? OR ` + "`group`" + ` IS NULL OR ` + "`group`" + ` = '')
-		) latest
-		WHERE rn = 1
-		GROUP BY model_name`, placeholders))
+			GROUP BY request_id
+		) latest ON l.id = latest.max_id
+		WHERE (l.` + "`group`" + ` NOT LIKE ? OR l.` + "`group`" + ` IS NULL OR l.` + "`group`" + ` = '')
+		GROUP BY l.model_name`, placeholders))
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
