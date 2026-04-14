@@ -164,6 +164,7 @@ func (s *ModelStatusService) GetModelStatus(modelName, window string) (map[strin
 				AND created_at >= ? AND created_at < ?
 				AND type IN (2, 5)
 				AND request_id != ''
+				AND (`+"`group`"+` NOT LIKE '%%特价%%' OR `+"`group`"+` IS NULL OR `+"`group`"+` = '')
 		) latest
 		WHERE rn = 1
 		GROUP BY FLOOR((created_at - %d) / %d)`,
